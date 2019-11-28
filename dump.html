@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<div id="display">
+<p id="starts">
+<BR><button id="button-scan" disabled onclick="app.refreshDeviceList()" id="button-scan">探す</button><BR>
+</p>
+<p id="stats"></p>
+</div>
+<script type="text/javascript">
+function parseAdvertisingData(bytes) {
+    var length, type, data, i = 0, advertisementData = {};
+
+    while (length !== 0) {
+
+        length = bytes[i] & 0xFF;
+        i++;
+
+        type = bytes[i] & 0xFF;
+        i++;
+
+        data = bytes.slice(i, i + length - 1); // length includes type byte, but not length byte
+        i += length - 2;  // move to end of data
+        i++;
+
+        advertisementData[type] = data;
+    }
+
+    return advertisementData;
+}
+
+var arrayBufferToIntArray = function(buffer) {
+    var result;
+
+    if (buffer) {
+        var typedArray = new Uint8Array(buffer);
+        result = [];
+        for (var i = 0; i < typedArray.length; i++) {
+            result[i] = typedArray[i];
+        }
+    }
+
+    return result;
+};
+
+var app = {
+  initialize: function() {
+    this.bindEvents();
+    document.getElementById("button-scan").disabled = false;
+  },
+  
+  bindEvents: function() {
+    document.addEventListener('deviceready', this.onDeviceReady, false);
+  },
+  
+  onDeviceReady: function() {
+    alert('exec onDeviceReady');
+    app.receivedEvent('deviceready');
+  },
+  
+  refreshDeviceList: function() {
+    console.log('exec refreshDeviceList');
+
+    let element = document.getElementById('stats');
+    element.innerHTML = "";
+
+    ble.scan([], 262144, app.onDiscoverDevice, app.onError);
+  },
+
+  onDiscoverDevice: function(device) {
+    let element = document.getElementById('stats');
+    element.innerHTML += '<b>' + device.name + '</b><br/>' +
+                'RSSI: ' + device.rssi + '&nbsp;|&nbsp;' +
+                'Advertising: ' + Object.keys(parseAdvertisingData(arrayBufferToIntArray(device.advertising))) + '<br/>' +
+                JSON.stringify(parseAdvertisingData(arrayBufferToIntArray(device.advertising))) + '<br/>' +
+                device.id + '<br/>';
+
+  },
+
+  // Update DOM on a Received Event
+  receivedEvent: function(id) {
+    document.getElementById("button-scan").disabled = false;
+    document.getElementById("button-scan").innerHTML = "探す";
+  }
+};
+
+setTimeout(function () {
+  app.initialize(); 
+  } ,2000);
+
+</script>
+<script type="text/javascript" src="cordova.js"></script>
+</body>
+</html> 
+
