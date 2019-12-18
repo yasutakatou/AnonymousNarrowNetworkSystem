@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+</head>
+<body>
+<div id="display">
+NAME: <input id="words" value="SNNS">　　<button id="button-scan" onclick="startScan(1)" >全部探す</button>　　<button id="button-scan" onclick="startScan(2)" >NAMEを指定して探す</button>　　<button id="button-scan" onclick="stopScan()" >止める</button>　　<button id="button-scan" onclick="app.LongrefreshDeviceList()" >central</button><BR>
+<BR>
+</div>
+<div id="stats"></div>
+<input id="inputs" value="hi"> <button id="add" onclick="startAdvertise(); event.stopPropagation()">Send</button>
+<hr>
+<div id="messages"></div>
+<script type="text/javascript" src="cordova.js"></script>
+<script type="text/javascript">
+var mode;
+var tweets = [];
+var tmpStr = [];
+var strFlag = [];
+var advFlag = false;
+
+var app = {
+  initialize: function() {
+    this.bindEvents();
+  },
+  
+  bindEvents: function() {
+    document.addEventListener('deviceready', this.onDeviceReady, false);
+  },
+  onDeviceReady: function() {
+    console.log('exec onDeviceReady');
+    app.receivedEvent('deviceready');
+  },
+  onDiscoverDevice: function(device) {
+    var words = document.getElementById('words').value;
+    if (device.name == words) {
+      ble.refreshDeviceCache( [], 250);
+      let element = document.getElementById('stats');
+      element.innerHTML += '<b>' + device.name + '</b><br/>' +
+        'RSSI: ' + device.rssi + '&nbsp;|&nbsp;' +
+        'Advertising: ' + Object.keys(parseAdvertisingData(arrayBufferToIntArray(device.advertising))) + '<br/>' +
+        JSON.stringify(parseAdvertisingData(arrayBufferToIntArray(device.advertising))) + '<br/>' +
+        device.id + '<br/>';
+    }
+    ble.refreshDeviceCache( device.id, 100);
+  },
+  refreshDeviceList: function() {
+    ble.scan([], 100, app.onDiscoverDevice, app.onError);
+    sleep(100);
+    ble.stopScan(app.onDiscoverDevice, app.onError);
+  }
+};
+
+function sleep(a){
+  var dt1 = new Date().getTime();
+  var dt2 = new Date().getTime();
+  while (dt2 < dt1 + a){
+    dt2 = new Date().getTime();
+  }
+  return;
+}
+
+document.addEventListener('deviceready', function () {
+  new Promise(function (resolve, reject) {
+      bluetoothle.initialize(resolve, reject,
+          { request: true, statusReceiver: false });
+
+  }).then(initializeSuccess, handleError);
+
+  app.refreshDeviceList();
+
+  let adds = document.getElementById("add");
+
+  adds.innerText = "Send";
+  adds.disabled = false;
+  
+});
+
+function initializeSuccess(result) {
+  if (result.status === "enabled") {
+    console.log("Bluetooth is enabled.");
+    document.getElementById("button-scan").disabled = false;
+  }
+  else {
+    document.getElementById("button-scan").disabled = true;
+    alert("Bluetooth is not enabled:", "status");
+  }
+}
+
+function String2Hex(tmp) {
+  var str = '';
+  for(var i = 0; i < tmp.length; i++) {
+    str += tmp[i].charCodeAt(0).toString(16);
+  }
+  return str;
+}
+
+var SERVICE_UUID;
+
+function startAdvertise() {
+  var strCounter = 0;
+  var decStr = [];
+
+  var texts = document.getElementById('inputs').value;
+  var mess = String2Hex(texts);
+  if (mess.length > 45) { 
+    alert("デコード45文字オーバー");
+    return;
+  }
+
+  if (texts.length == 0) {
+    alert("Message Empty!")
+    return;
+  }
+
+  let element = document.getElementById('messages');
+  element.innerHTML = "<div style=\"background-color:#ffcc99\" align=\"left\">" + texts + "</div><BR>" + element.innerHTML;
+
+  let adds = document.getElementById("add");
+
+  adds.innerText = "Sending..";
+  adds.disabled = true;
+  
+  var counter = 2;
+  var charParse = 3;
+  
+  if (mess.length > charParse) {
+    for (var i = 0; i * charParse < mess.length; i++) {
+      if (((i + 1) * charParse) > mess.length) {
+        var splitMess = i.toString(10) + mess.substring(i * charParse);
+        if (splitMess.length <= charParse) {
+          for (var r = 0; splitMess.length < charParse + 1; r++) {
+            mess = mess + "0";
+            splitMess = i.toString(10) + mess.substring(i * charParse);
+          }
+        }
+        decStr.push(splitMess);
+      } else {
+        var splitMess = i.toString(10) + mess.substring((i * charParse),((i + 1) * charParse));
+        decStr.push(splitMess);
+     }
+   }
+   decStr.push("0000");
+  } else {
+    if (mess.length < charParse) {
+      for (var r = 0; mess.length < charParse; r++) {
+          mess = mess + "0";
+      }
+    }
+    decStr.push("0" + mess);
+    decStr.push("0000");
+  }
+
+  for (var r = 0; r < counter; r++) {
+    for (var i = 0; i < decStr.length; i++) {
+      //SERVICE_UUID = decStr[strCounter];
+      var elementss = document.getElementById('messages');
+      //element.innerHTML += decStr[strCounter] + ' ';
+      //element.innerHTML += strCounter.toString(10) + '/';
+      //element.innerHTML += decStr.length.toString(10) + '<br/>';
+      elementss.innerHTML += decStr[strCounter] + ' ' + strCounter.toString(10) + '/' + decStr.length.toString(10) + '<BR>';
+
+      //appz.createService();
+
+      blePeripheral.createService(decStr[strCounter]);
+      blePeripheral.publishService(decStr[strCounter]);
+      blePeripheral.startAdvertising(decStr[strCounter]);
+
+      sleep(1000);
+      stopAdvertise();
+      appz.stopAdvertise();
+      
+      strCounter++;
+      if (decStr.length <= strCounter) {
+        strCounter = 0;
+      }
+
+      sleep(250);
+
+      bluetoothle.disable(removeAllServicesSuccess, handleError);
+
+      sleep(1000);
+
+      bluetoothle.enable(removeAllServicesSuccess, handleError);
+
+      sleep(250);
+
+      appz.initialize();
+
+      sleep(1000);
+    }
+  }
+
+  stopAdvertise();
+  appz.stopAdvertise();
+
+  adds.innerText = "Send";
+  adds.disabled = false;
+
+}
+
+function removeAllServicesSuccess() {
+  console.log("Success...");
+}
+
+function stopAdvertise() {
+    let element = document.getElementById('stats');
+    element.innerHTML = '';
+    bluetoothle.stopAdvertising(stopAdvertiseSuccess, handleError);
+}
+
+function stopAdvertiseSuccess() {
+    console.log("Stop advertise...");
+}
+
+function startScan(modes) {
+  new Promise(function (resolve, reject) {
+    bluetoothle.initialize(resolve, reject,
+        { request: true, statusReceiver: false });
+    mode = modes;
+
+    console.log("Starting scan for devices...", "status");
+    
+    bluetoothle.startScan(startScanSuccess, handleError, { services: [] });
+  }).then(initializeSuccess, handleError);
+}
+
+function handleError(error) {
+  let element = document.getElementById('stats');
+  element.innerHTML += '<b>Error: ' + error.error + '</b><br/>';
+}
+
+function stopScan() {
+    let element = document.getElementById('stats');
+    element.innerHTML = '';
+    bluetoothle.stopScan(stopScanSuccess, handleError);
+}
+
+function stopScanSuccess() {
+    console.log("Stop scan for devices...");
+    let element = document.getElementById('stats');
+    element.innerHTML = '';
+}
+
+function hex2a(hex) {
+  var str = '';
+  for (var i = 0; i < hex.length; i += 2) str += String.fromCharCode(parseInt(hex.substr(i, 2), 16));
+  return str;
+}
+
+function startScanSuccess(result) {
+  if (result.status === "scanResult") {
+    if (result.name != null) {
+      if (mode == 2) {
+        var words = document.getElementById('words').value;
+        if (result.name != words) { return; }
+      }
+      let element = document.getElementById('stats');
+      var enc = toHexString(reverseHex(parseAdvertisingData(encodedStringToBytes(result.advertisement))[3]));
+      //element.innerHTML += 'Name: <b>' + result.name + '</b> Address:' + result.address + ' Advertise: ' + result.advertisement + '<br/>';
+      element.innerHTML += 'Name: ' + result.name;
+      if (enc.length > 1) {
+        element.innerHTML += " Adv: " + enc + "]";
+      }
+      element.innerHTML += '<br/>';
+      if (enc.length > 1) {
+        //element.innerHTML += '16bit-UUID(0x03)): ' + hex2a(enc) + '<br/>';
+
+        var macs = result.address;
+        
+        svcs = enc;
+        //alert(svcs);
+        
+        strCnt = parseInt(svcs.substr(0,1));
+        
+        if (!tweets[macs]) { tweets[macs] = ["000", "000", "000", "000", "000", "000", "000", "000", "000", "000", "000", "000", "000", "000", "000"]; }
+        if (!strFlag[macs]) { strFlag[macs] = true; }
+        
+        if (svcs == "0000") {
+          tmpStrs = "";
+          for (var i = 0; i < 15; i++) { tmpStrs = tmpStrs + tweets[macs][i]; }
+          tmpStr.push(tmpStrs);
+          var strCnts = 0;
+          var strsCnts = 0;
+          for (var rr = 0; rr < tmpStr.length; rr++) {
+            if (tmpStr[rr].length > strCnts) {
+              strCnts = tmpStr[rr].length;
+              strsCnts = rr;
+            }
+          }
+
+          if (strFlag[macs] == true) {
+            setTimeout(function() {
+              if (strFlag[macs] == true) {
+                var hexStr = hex2a(tmpStr[strsCnts]);
+                if (hexStr.length > 1) {
+                  let element = document.getElementById('messages');
+                  element.innerHTML = "<div style=\"background-color:#ffcc99\" align=\"right\">(" + hexStr + ")</div><BR>" + element.innerHTML;
+                  tweets[macs] = ["000", "000", "000", "000", "000", "000", "000", "000", "000", "000", "000", "000", "000", "000", "000"];
+                  for (var rr = 0; rr < tmpStr.length; rr++) {
+                    tmpStr[rr] = "";
+                  }
+                  strFlag[macs] = false;
+                }
+              }
+            }, 1000);
+          }
+        } else {
+          tweets[macs][strCnt] = svcs.substr(1);
+        }
+        ble.refreshDeviceCache( [], 250);
+      }
+    }
+  }
+}
+
+
+function  encodedStringToBytes(string) {
+  var data = atob(string);
+  var bytes = new Uint8Array(data.length);
+  for (var i = 0; i < bytes.length; i++) {
+    bytes[i] = data.charCodeAt(i);
+  }
+  return bytes;
+}
+
+function parseAdvertisingData(bytes) {
+  var length, type, data, i = 0, advertisementData = {};
+  while (length !== 0) {
+    length = bytes[i] & 0xFF;
+    i++;
+    type = bytes[i] & 0xFF;
+    i++;
+    data = bytes.slice(i, i + length - 1); // length includes type byte, but not length byte
+    i += length - 2;  // move to end of data
+    i++;
+    advertisementData[type] = data;
+  }
+  return advertisementData;
+}
+
+function reverseHex(byteArray) {
+  var bytes = new Uint8Array(byteArray.length);
+  for (var i = 0; i < bytes.length; i++) {
+    bytes[i] = byteArray[bytes.length - i - 1];
+  }
+  return bytes;
+}
+
+function toHexString(byteArray) {
+  return Array.prototype.map.call(byteArray, function(byte) {
+    return ('0' + (byte & 0xFF).toString(16)).slice(-2);
+  }).join('');
+}
+
+document.addEventListener("DOMContentLoaded", function() {
+  document.getElementById('add').addEventListener('click', add);
+});
+
+//function add() {
+//  if (advFlag == false) {
+//    advFlag = true;
+//
+//    var inputs = document.getElementById('inputs').value;
+//
+//    if (inputs.length == 0) {
+//      alert("Message Empty!")
+//      return;
+//    }
+//
+//    //startAdvertise();
+//
+//    let element = document.getElementById('messages');
+//    element.innerHTML = "<div style=\"background-color:#ffcc99\" align=\"left\">" + inputs + "</div><BR>" + element.innerHTML;
+//
+//    //var utf8str = encodeURI(inputs).replace(/%/g, '');
+//    //console.log(utf8str);
+//    
+//    advFlag = false;
+//  }
+//}
+
+var arrayBufferToIntArray = function(buffer) {
+  var result;
+  if (buffer) {
+    var typedArray = new Uint8Array(buffer);
+    result = [];
+    for (var i = 0; i < typedArray.length; i++) {
+      result[i] = typedArray[i];
+    }
+  }
+  return result;
+};
+
+var appz = {
+  initialize: function() {
+     this.bindEvents();
+  },
+  bindEvents: function() {
+    document.addEventListener('deviceready', this.onDeviceReady, false);
+  },
+  onDeviceReady: function() {
+    //appz.createService();
+  },
+  createService: function() {
+    Promise.all([
+      blePeripheral.createService(SERVICE_UUID),
+      blePeripheral.publishService(SERVICE_UUID),
+      blePeripheral.startAdvertising(SERVICE_UUID)
+    ]).then(
+      function() { console.log('Created Service'); },
+      app.onError
+    );
+  },
+  stopAdvertise: function() {
+    blePeripheral.stopAdvertising();
+  }
+};
+
+appz.initialize();
+</script>
+</body>
+</html> 
